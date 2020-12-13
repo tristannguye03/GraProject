@@ -1,60 +1,52 @@
-import os
-from math import sqrt
-from itertools import islice
+python3 -m pip install numpy
+pip3 install pandas
 
+#convert raw data
+song_df.to_excel("millionsong.xlsx")
+
+#importing all the required libraries
 import numpy as np
 import pandas as pd
-from scipy.sparse.linalg import svds
-from sklearn.metrics import mean_squared_error
-from sklearn.metrics.pairwise import pairwise_distances
-from sklearn.model_selection import train_test_split
 
-%%time
-d_path = "data/kaggle_visible_evaluation_triplets.txt"
-new_path = "data/song_data.csv"
-with open(d_path, "r") as f1, open(new_path, "w") as f2:
-    i = 0
-    f2.write("user_id,song_id,listen_count\n")
-    while True:
-        next_n_lines = list(islice(f1, 9))
-        if not next_n_lines:
-            break
+#importing both the datasets
+songmetadata = pd.read_csv(r'Destop\song_data.csv')
+#one of the file is a text file hence we import it with pd.read_fwf
 
-        # process next_n_lines: get user_id,song_id,listen_count info
-        output_line = ""
-        for line in next_n_lines:
-            user_id, song, listen_count = line.split("\t")
-            output_line += "{},{},{}\n".format(user_id, song, listen_count.strip())
-        f2.write(output_line)
-        
-        # print status
-        i += 1
-        if i % 20000 == 0:
-            print "%d songs converted..." % i
-def load_music_data(file_name):
-    """Get reviews data, from local csv."""
-    if os.path.exists(file_name):
-        print("-- " + file_name + " found locally")
-        df = pd.read_csv(file_name)
- 
-    return df
- 
-# Load music data with sampling fraction = 0.01 for reduce processing time.
-song_data = load_music_data(new_path)
-song_data = song_data.sample(frac=0.01, replace=False)
- 
-print "-- Explore data"
-display(song_data.head())
- 
-n_users = song_data.user_id.unique().shape[0]
-n_items = song_data.song_id.unique().shape[0]
-print "Number of users = " + str(n_users) + " | Number of songs = " + str(n_items)
+#fwf stands for fixed width file
+othersongdata = pd.read_fwf(r'Destop\10000.txt')
+#naming the columns for the othersongdata
+othersongdata.columns = ['user_id','song_id','listen_count’]
+                         
+#merging both the datasets and removing duplicates
+song_df = pd.merge(othersongdata, songmetadata.drop_duplicates(['song_id']), on="song_id", how="left")
 
-print "-- Showing the most popular songs in the dataset"
-unique, counts = np.unique(song_data["song_id"], return_counts=True)
-popular_songs = dict(zip(unique, counts))
-df_popular_songs = pd.DataFrame(popular_songs.items(), columns=["Song", "Count"])
-df_popular_songs = df_popular_songs.sort_values(by=["Count"], ascending=False)
-df_popular_songs.head()
+#writing the file in .csv to visualize in Tableau
+song_df.to_csv(r'Destop\Tableau.csv', index = False)
 
-
+                         
+import numpy as np
+import pandas as pd
+songmetadata = pd.read_csv(r'Destop\song_data.csv')
+othersongdata = pd.read_fwf(r'Destop\10000.txt')
+othersongdata.columns = ['user_id','song_id','listen_count’]
+song_df = pd.merge(othersongdata, songmetadata.drop_duplicates(['song_id']), on="song_id", how="left")
+song_grouped = pd.DataFrame(song_df.groupby('song_id')['listen_count'].count())
+song_grouped = pd.DataFrame(song_df.groupby('song_id')['listen_count'].count())
+song_df.astype({'listen_count': 'int32'},{'song_id':'str'}).dtypes
+song_df[song_df['song_id'] == 'SOFVZRE12A8C139783']
+songs_crosstab = pd.pivot_table(song_df, values = 'listen_count', index = 'user_id', columns = 'song_id’)
+songs_crosstab.head()
+predictor_song_ratings = songs_crosstab['SOFVZRE12A8C139783']
+predictor_song_ratings[predictor_song_ratings>= 1]
+similar_songs = songs_crosstab.corrwith(predictor_song_ratings)
+corr_listened_song = pd.DataFrame(similar_songs, columns = ['pearsonR'])
+corr_listened_song.dropna(inplace = True)
+predictor_corr_summary =corr_listened_song.join(song_grouped['listen_count'])
+predictor_corr_summary = predictor_corr_summary.sort_values('pearsonR', ascending = False)
+final_recommended_songs = predictor_corr_summary[predictor_corr_summary.pearsonR < 0.9999]
+final_recommended_songs.sort_values('pearsonR', ascending = False)
+final_recommended_songs = final_recommended_songs.reset_index()
+song_df_one = song_df.drop(['listen_count'], axis=1)
+similar_songs = pd.merge(final_recommended_songs, song_df_one.drop_duplicates(["song_id"]), on="song_id", how="left")
+similar_songs = similar_songs.sort_values('pearsonR', ascending = False)
+similar_songs.head(50)                        
